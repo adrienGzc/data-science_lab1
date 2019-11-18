@@ -1,7 +1,9 @@
 import pathlib
 import pandas
-import numpy
-from sklearn.model_selection import cross_val_score, cross_val_predict
+import numpy as np
+from scipy import interp
+from sklearn.model_selection import cross_val_predict
+from sklearn.model_selection import StratifiedKFold
 from sklearn.model_selection import KFold
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
@@ -78,31 +80,36 @@ def purgeData(data):
   convertToNumeric(data)
   convertStringToFloat(data)
 
-def getClassifierPrediction(data, targetData, classifiers=[]):
-  tmp = []
-  # Param for cross-validation-scorer
-  kFold = KFold(n_splits=10, shuffle=True, random_state=RANDOM_SEED)
-
-  for clf in classifiers:
-    tmp.append(cross_val_predict(clf, data, targetData, cv=kFold, n_jobs=4))
-  return tmp
-
-def displayROCCurve(scoreList, targetData, options=[]):
+def getAUCClassifier(data, targetData, classifiers=[], display=True):
   # Init ROC figure
   plt.figure()
   plt.title('ROC curve')
   plt.plot([0, 1], [0, 1], 'k--')
   plt.ylabel('True positive rate')
   plt.xlabel('False positive rate')
+  cv = StratifiedKFold(n_splits=150)
 
-  for index in range(len(scoreList)):
-    fpr, tpr, _ = roc_curve(targetData, scoreList[index])
-    roc_auc = auc(fpr, tpr)
-    plt.plot(fpr, tpr, label=options[index]['label'] + ': %0.2f' % roc_auc, color=options[index]['color'])
+  tprs = []
+  aucs = []
+  for clf in classifiers:
+    mean_fpr = np.linspace(0, 1, 25)
+    for train, test in cv.split(data, targetData):
+      data_train, data_test = data.iloc[train], data.iloc[test]
+      targetData_train, targetData_test = targetData[train], targetData[test]
+      probas = clf['instance'].fit(data_train, targetData_train).predict_proba(data_test)
+      fpr, tpr, _ = roc_curve(targetData_test, probas[:, 1])
+      tprs.append(interp(mean_fpr, fpr, tpr))
+      tprs[-1][0] = 0.0
+      roc_auc = auc(fpr, tpr)
+      aucs.append(roc_auc)
+    mean_tpr = np.mean(tprs, axis=0)
+    mean_tpr[-1] = 1.0
+    mean_auc = auc(mean_fpr, mean_tpr)
+    plt.plot(mean_fpr, mean_tpr, lw=1, alpha=0.5, label=clf['label'] + ': %0.2f' % mean_auc, color=clf['color'])
 
   plt.legend(loc="lower right")
-  plt.show()
-
+  if display == True:
+    plt.show()
 
 if __name__ == '__main__':
   print('Welcome to DisneyLand!\nGetting data...')
@@ -116,20 +123,14 @@ if __name__ == '__main__':
   targetData = data['survived']
   del data['survived']
 
-  # n_estimators=100, max_depth=6, random_state=RANDOM_SEED
-  classifierList = [
-    RandomForestClassifier(
-      n_estimators=100,
+  classifierList = [{
+    'label': 'Random Forest',
+    'instance': RandomForestClassifier(
+      n_estimators=50,
       criterion='entropy',
-      max_depth=10,
-      n_jobs=4,
-      random_state=RANDOM_SEED,
-    ),
-  ]
-  allScore = getClassifierPrediction(data, targetData, classifierList)
-
-  # Display ROC Curve
-  optionsROCCurve = []
-  for index in range(len(allScore)):
-    optionsROCCurve.append({'label': 'Random Forest', 'color': 'r'})
-  displayROCCurve(allScore, targetData, optionsROCCurve)
+      max_depth=6,
+      n_jobs=-1,
+      random_state=RANDOM_SEED),
+    'color': 'b'
+  }]
+  getAUCClassifier(data, targetData, classifierList)

@@ -87,12 +87,12 @@ def getAUCClassifier(data, targetData, classifiers=[], display=True):
   plt.plot([0, 1], [0, 1], 'k--')
   plt.ylabel('True positive rate')
   plt.xlabel('False positive rate')
-  cv = StratifiedKFold(n_splits=30)
+  cv = StratifiedKFold(n_splits=150)
 
   tprs = []
   aucs = []
   for clf in classifiers:
-    mean_fpr = np.linspace(0, 1, 20)
+    mean_fpr = np.linspace(0, 1, 25)
     for train, test in cv.split(data, targetData):
       data_train, data_test = data.iloc[train], data.iloc[test]
       targetData_train, targetData_test = targetData[train], targetData[test]
@@ -105,10 +105,11 @@ def getAUCClassifier(data, targetData, classifiers=[], display=True):
     mean_tpr = np.mean(tprs, axis=0)
     mean_tpr[-1] = 1.0
     mean_auc = auc(mean_fpr, mean_tpr)
-    plt.plot(mean_fpr, mean_tpr, lw=3, alpha=0.7, label=clf['label'] + ': %0.2f' % mean_auc, color=clf['color'])
+    plt.plot(mean_fpr, mean_tpr, lw=1, alpha=0.5, label=clf['label'] + ': %0.2f' % mean_auc, color=clf['color'])
 
   plt.legend(loc="lower right")
-  plt.show()
+  if display == True:
+    plt.show()
 
 if __name__ == '__main__':
   print('Welcome to DisneyLand!\nGetting data...')
@@ -140,9 +141,8 @@ if __name__ == '__main__':
     },
     {
       'label': 'Naive Bayes',
-      'instance': GaussianNB(priors=None),
+      'instance': GaussianNB(),
       'color': 'g'
     }
   ]
   getAUCClassifier(data, targetData, classifierList)
-  # displayROCCurve(allScore, targetData, optionsROCCurve)
