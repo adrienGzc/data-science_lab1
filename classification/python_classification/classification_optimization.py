@@ -1,6 +1,7 @@
 import pathlib
 import pandas
 import numpy as np
+from imblearn.over_sampling import SMOTE
 from scipy import interp
 from sklearn.model_selection import cross_val_predict
 from sklearn.model_selection import StratifiedKFold
@@ -75,10 +76,21 @@ def replaceTitleNameByNumeric(data):
   data['title'] = data['title'].map(titleMapping)
   del data['name']
 
-def purgeData(data):
+def fixClassImbalance(data, targetData):
+  smote = SMOTE(ratio='minority')
+  dataCreated, targetDataCreate = smote.fit_sample(data, targetData)
+  return dataCreated, targetDataCreate
+
+def purgeData(data, optimize=False):
+  targetData = data['survived']
+  del data['survived']
   replaceTitleNameByNumeric(data)
   convertToNumeric(data)
   convertStringToFloat(data)
+  if optimize == True:
+    return fixClassImbalance(data, targetData)
+  else:
+    return data, targetData
 
 def getAUCClassifier(data, targetData, classifiers=[], display=True):
   # Init ROC figure
@@ -94,7 +106,7 @@ def getAUCClassifier(data, targetData, classifiers=[], display=True):
   for clf in classifiers:
     mean_fpr = np.linspace(0, 1, 25)
     for train, test in cv.split(data, targetData):
-      data_train, data_test = data.iloc[train], data.iloc[test]
+      data_train, data_test = data[train], data[test]
       targetData_train, targetData_test = targetData[train], targetData[test]
       probas = clf['instance'].fit(data_train, targetData_train).predict_proba(data_test)
       fpr, tpr, _ = roc_curve(targetData_test, probas[:, 1])
@@ -116,12 +128,8 @@ if __name__ == '__main__':
   data = getDataFromCSV(FILE_NAME, ['boat', 'home.dest', 'body', 'ticket', 'cabin'])
   print('Done!')
   print('Purging the data...')
-  purgeData(data)
+  data, targetData = purgeData(data, optimize=True)
   print('Finish purging the data.\n')
-
-  # extract column survived for target column prediction and delete it from the dataset
-  targetData = data['survived']
-  del data['survived']
 
   classifierList = [{
     'label': 'Random Forest',
@@ -133,4 +141,4 @@ if __name__ == '__main__':
       random_state=RANDOM_SEED),
     'color': 'b'
   }]
-  getAUCClassifier(data, targetData, classifierList)
+  getAUCClassifier(data, targetData, classifierList, display=True)
